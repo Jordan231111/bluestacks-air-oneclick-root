@@ -1,4 +1,5 @@
 # bluestacks-air-oneclick-root
+
 Easily root bluestacks air for macos with one command
 
 A simple tool to root BlueStacks Air on macOS using Kitsune Magisk.
@@ -8,6 +9,7 @@ A simple tool to root BlueStacks Air on macOS using Kitsune Magisk.
 ## Compatibility
 
 This tool has been tested with the following versions of BlueStacks Air:
+
 - 5.21.680.7532
 - 5.21.695.7506
 - 5.21.700.7523
@@ -20,7 +22,7 @@ This tool has been tested with the following versions of BlueStacks Air:
 
 ## Prerequisites
 
-1.  **Install [BlueStacks Air](https://www.bluestacks.com/mac)** and **IMPORTANT** launch it once so it finishes its first-run setup, then quit BlueStacks.
+1. **Install [BlueStacks Air](https://www.bluestacks.com/mac)** and **IMPORTANT** launch it once so it finishes its first-run setup, then quit BlueStacks.
 
 That’s all you need—the single-line installer takes care of cloning this repo, downloading the latest Kitsune Magisk APK, and patching BlueStacks for you.
 
@@ -29,9 +31,11 @@ That’s all you need—the single-line installer takes care of cloning this rep
 System Integrity Protection (SIP) is a security feature in macOS. The rooting method depends on whether SIP is enabled or disabled on your system.
 
 To check your SIP status, open **Terminal** and run:
+
 ```bash
 csrutil status
 ```
+
 The output will tell you if SIP is `enabled` or `disabled`.
 
 ---
@@ -47,6 +51,7 @@ Paste **one** command into Terminal and let the script do the rest.
 ```
 
 What happens:
+
 1. Repo is cloned to a temporary folder.
 2. Latest Kitsune Magisk is auto-downloaded.
 3. A patched `initrd_hvf.img.patched` is generated.
@@ -66,4 +71,4 @@ Everything (patch + replacement + BlueStacks launch) is handled automatically.
 
 If you found this tool helpful, consider buying me a coffee!
 
-[![](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://ko-fi.com/yejordan)
+[![Donate via Ko-Fi](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://ko-fi.com/yejordan)
