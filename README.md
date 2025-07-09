@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 # bluestacks-air-oneclick-root
 Easily root bluestacks air for macos with one command
-=======
-# Root BlueStacks Air on macOS
 
 A simple tool to root BlueStacks Air on macOS using Kitsune Magisk.
 
@@ -72,4 +69,3 @@ Everything (patch + replacement + BlueStacks launch) is handled automatically.
 If you found this tool helpful, consider buying me a coffee!
 
 [![](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://ko-fi.com/yejordan)
->>>>>>> 63e5a8c (Initial version for rooting Bluestacks Air for MacOS.)
