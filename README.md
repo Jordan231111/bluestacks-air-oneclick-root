@@ -20,11 +20,9 @@ This tool has been tested with the following versions of BlueStacks Air:
 
 ## Prerequisites
 
-1.  **Install [BlueStacks Air](https://www.bluestacks.com/mac).**
-2.  **‼️ IMPORTANT ‼️** Open BlueStacks Air at least once to let it initialize, then close it completely.
-3.  **Download [Kitsune Magisk](https://github.com/1q23lyc45/KitsuneMagisk/releases).** Download the APK file from the latest release.
-4.  **Download this repository.** You can either clone it or download the ZIP and extract it.
-5.  **Place the Magisk APK** inside the downloaded repository folder.
+1.  **Install [BlueStacks Air](https://www.bluestacks.com/mac)** and launch it once so it finishes its first-run setup, then quit BlueStacks.
+
+That’s all you need—the single-line installer takes care of cloning this repo, downloading the latest Kitsune Magisk APK, and patching BlueStacks for you.
 
 ## Understanding System Integrity Protection (SIP)
 
