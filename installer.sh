@@ -7,6 +7,16 @@
 
 set -euo pipefail
 
+# Handle the case where the script is executed via:
+#   bash -c "$(curl -fsSL <URL>)" <cmd> [args]
+# In this scenario, <cmd> becomes $0 and there are *no* positional
+# parameters. Detect this and shift the value into $1 so the rest of the
+# script can operate as usual.
+if [[ $# -eq 0 && "$0" =~ ^(root|manual|unroot)$ ]]; then
+  # Re-assign positional params so that $1 holds the command
+  set -- "$0" "${@:1}"
+fi
+
 # Constants
 REPO_URL="https://github.com/Jordan231111/bluestacks-air-oneclick-root"
 WORK_DIR="/tmp/root-bluestacks-air-$$"
