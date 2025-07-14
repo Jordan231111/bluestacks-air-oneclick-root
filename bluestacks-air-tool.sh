@@ -214,21 +214,12 @@ EOF
         echo '[*] Starting BlueStacks...'
         open -n "$BLUESTACKS_APP_PATH"
 
-        echo '[*] Waiting for BlueStacks to finish launching...'
-        sleep 5
-
-        echo '[*] Installing Magisk APK automatically...'
-        if open -a "$BLUESTACKS_APP_PATH" "$magisk_apk_path"; then
-          echo "[*] Magisk APK sent to BlueStacks. Follow any prompts inside the emulator to complete installation."
-        else
-          echo "[!] Automatic APK install failed — you can still drag & drop '$magisk_apk_path' into BlueStacks manually."
-        fi
-
         echo '[*] Rooting process complete.'
         echo ""
         echo 'Next Steps:'
-        echo "1. Open the Kitsune Mask app inside BlueStacks and follow the on-screen prompts for additional setup."
-        echo "2. After BlueStacks reboots, you should have root access."
+        echo "1. Install the Magisk APK ('$magisk_apk_path') in BlueStacks."
+        echo "2. Open the Kitsune Mask app and follow the on-screen prompts for additional setup."
+        echo "3. After reboot, your BlueStacks should be rooted."
     else
         echo '[*] Patched initrd created successfully.'
         echo ""
