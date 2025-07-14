@@ -91,9 +91,9 @@ function do_root() {
             exit 1
         fi
 
-        # Fetch latest release metadata from GitHub API and parse for .apk browser_download_url
+        # Fetch latest release metadata from GitHub API and parse for app-release.apk browser_download_url
         LATEST_API="https://api.github.com/repos/1q23lyc45/KitsuneMagisk/releases/latest"
-        DL_URL=$(curl -fsSL "$LATEST_API" | grep -E 'browser_download_url.*\.apk"' | head -n 1 | cut -d '"' -f 4)
+        DL_URL=$(curl -fsSL "$LATEST_API" | grep -E 'browser_download_url.*app-release\.apk"' | head -n 1 | cut -d '"' -f 4)
 
         if [[ -z "$DL_URL" ]]; then
             echo "[!] Unable to determine download URL for Kitsune Magisk APK. Provide it manually with -a." >&2
