@@ -1,0 +1,1011 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.editorconfig
+.gitignore
+bluestacks-air-tool.sh
+installer.sh
+LICENSE.md
+magisk.rc
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".editorconfig">
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+trim_trailing_whitespace = false
+</file>
+
+<file path=".gitignore">
+/backup
+/files
+
+*.apk
+/magisk
+/magisk-bin
+/build
+
+.DS_Store
+</file>
+
+<file path="bluestacks-air-tool.sh">
+#!/bin/bash
+set -e
+
+# Globals
+BLUESTACKS_APP_PATH="/Applications/BlueStacks.app"
+# ADB_PORT is not used, but let's keep it here for future use
+# ADB_PORT=5555
+ARCH="arm64-v8a"
+BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# --- Helper Functions ---
+
+function print_usage() {
+    echo "Usage: $0 <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  root      - Patch BlueStacks to include Magisk."
+    echo "  unroot    - Restore original BlueStacks installation."
+    echo "  help      - Show this help message."
+    echo ""
+    echo "Root Options:"
+    echo "  -o, --output <path>    - Path to save the patched initrd.img. (Disables in-place modification)"
+    echo "  -b, --backup-dir <dir> - Directory to store the original initrd.img backup."
+    echo "  -a, --apk <path>       - Path to the Magisk APK file (e.g., magisk.apk)."
+    echo ""
+    echo "Unroot Options:"
+    echo "  -b, --backup-dir <dir> - Directory where the original initrd.img backup is stored."
+}
+
+function abspath() {
+  if [[ "$1" == /* ]]; then
+    echo "$1"
+  else
+    echo "$(pwd)/$1"
+  fi
+}
+
+function check_bluestacks() {
+    if [ ! -d "$BLUESTACKS_APP_PATH" ]; then
+        echo "[!] BlueStacks not found at $BLUESTACKS_APP_PATH"
+        exit 1
+    fi
+    local plist_file="$BLUESTACKS_APP_PATH/Contents/Info.plist"
+    local bs_version
+    bs_version=$(defaults read "$plist_file" CFBundleShortVersionString 2>/dev/null)
+    echo "[*] Found BlueStacks Air version $bs_version"
+}
+
+# --- Rooting Logic ---
+
+function do_root() {
+    local initrd_output=""
+    local backup_dir=""
+    local magisk_apk_path=""
+    local inplace=1
+
+    # Parse root command options
+    shift # remove 'root' from args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -o|--output)
+                initrd_output=$(abspath "$2")
+                mkdir -p "$(dirname "$initrd_output")"
+                inplace=0
+                shift 2
+                ;;
+            -b|--backup-dir)
+                backup_dir=$(abspath "$2")
+                mkdir -p "$backup_dir"
+                shift 2
+                ;;
+            -a|--apk)
+                magisk_apk_path=$(abspath "$2")
+                shift 2
+                ;;
+            *)
+                echo "Unknown option: $1"
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check for Magisk APK
+    if [ -z "$magisk_apk_path" ]; then
+        # Attempt auto-download of the latest Kitsune Magisk APK
+        echo "[*] Magisk APK not specified – attempting to download latest Kitsune Magisk…"
+
+        if ! command -v curl >/dev/null 2>&1; then
+            echo "[!] curl is required to auto-download the Magisk APK. Please install curl or provide the APK manually (-a)." >&2
+            exit 1
+        fi
+
+        # Fetch latest release metadata from GitHub API and parse for .apk browser_download_url
+        LATEST_API="https://api.github.com/repos/1q23lyc45/KitsuneMagisk/releases/latest"
+        DL_URL=$(curl -fsSL "$LATEST_API" | grep -E 'browser_download_url.*\.apk"' | head -n 1 | cut -d '"' -f 4)
+
+        if [[ -z "$DL_URL" ]]; then
+            echo "[!] Unable to determine download URL for Kitsune Magisk APK. Provide it manually with -a." >&2
+            exit 1
+        fi
+
+        magisk_apk_path="$BASE_DIR/KitsuneMagisk-latest.apk"
+        echo "[*] Downloading Magisk from: $DL_URL"
+        curl -fL "$DL_URL" -o "$magisk_apk_path" || { echo "[!] Failed to download Magisk APK." >&2; exit 1; }
+        echo "[*] Magisk downloaded to $magisk_apk_path"
+    fi
+
+    if [ ! -f "$magisk_apk_path" ]; then
+        echo "[!] Magisk APK not found at: $magisk_apk_path"
+        exit 1
+    fi
+
+    echo ""
+    echo '=================================================='
+    echo '**        BlueStacks Air Magisk Installer       **'
+    echo '=================================================='
+    echo ""
+
+    if [ $inplace -eq 1 ]; then
+        pkill -x BlueStacks || true # Don't fail if not running
+        echo 'Checklist:'
+        echo '* You have started BlueStacks for the first time.'
+        echo '* BlueStacks is closed before proceeding.'
+        echo ''
+    fi
+
+    read -p "Continue? (y/n): " confirm && [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]] || exit 0
+    echo ""
+
+    local initrd_path="$BLUESTACKS_APP_PATH/Contents/img/initrd_hvf.img"
+    local initrd_backup_path
+    if [ -n "$backup_dir" ]; then
+        initrd_backup_path="$backup_dir/initrd_hvf.img"
+    else
+        initrd_backup_path="$initrd_path.bak"
+    fi
+
+    if [ -z "$initrd_output" ]; then
+        initrd_output="$initrd_path"
+    fi
+
+    # Use a secure temporary directory
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    function cleanup() {
+        echo "[*] Cleaning up temporary files..."
+        rm -rf "$temp_dir"
+    }
+    trap cleanup EXIT
+
+    local magisk_bin_dir="$temp_dir/magisk-bin"
+    mkdir -p "$magisk_bin_dir"
+
+    echo '[*] Preparing Magisk...'
+    unzip -oq "$magisk_apk_path" -d "$temp_dir/magisk"
+
+    local bin_names=("magisk64" "magiskinit" "magiskpolicy")
+    for bin_name in "${bin_names[@]}"; do
+        local src_so="$temp_dir/magisk/lib/$ARCH/lib$bin_name.so"
+        if [ -f "$src_so" ]; then
+            cp "$src_so" "$magisk_bin_dir/$bin_name"
+        else
+            echo "[!] Failed to find required binary: $bin_name in APK."
+            exit 1
+        fi
+    done
+    cp "$temp_dir/magisk/assets/stub.apk" "$magisk_bin_dir/stub.apk"
+
+    echo "[*] Backing up initrd to $initrd_backup_path"
+    if [ ! -f "$initrd_backup_path" ]; then
+        cp "$initrd_path" "$initrd_backup_path"
+    fi
+
+    local build_dir="$temp_dir/build"
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    echo '[*] Patching initrd...'
+    mkdir initrd
+    cd initrd
+
+    # Some BlueStacks versions ship initrd_hvf.img compressed, others don't.
+    # Test if the file is gzip by attempting to list (-t); fall back to cat on failure.
+    if gzip -t "$initrd_backup_path" >/dev/null 2>&1; then
+        gzip -dc "$initrd_backup_path" | cpio -id
+    else
+        cat "$initrd_backup_path" | cpio -id
+    fi
+
+    # Copy magisk files
+    cp -r "$magisk_bin_dir" boot/magisk
+    chmod 700 boot/magisk/*
+    cp "$BASE_DIR/magisk.rc" boot/magisk.rc
+
+    # Patch stage2.sh
+    # Using a temp file for sed to be compatible with both GNU and BSD sed.
+    sed -e 's/exec \/init//' boot/stage2.sh > boot/stage2.sh.tmp
+    cat << EOF >> boot/stage2.sh.tmp
+log_echo "Installing magisk.rc"
+cat /boot/magisk.rc >> /init.bst.rc
+die_if_error "Cannot install magisk.rc"
+
+exec /init
+EOF
+    mv boot/stage2.sh.tmp boot/stage2.sh
+
+    echo "[*] Repacking initrd to $initrd_output"
+    find . | cpio -H newc -o | gzip > "$initrd_output"
+
+    cd "$BASE_DIR"
+
+    if [ $inplace -eq 1 ]; then
+        echo '[*] Starting BlueStacks...'
+        open -n "$BLUESTACKS_APP_PATH"
+        echo '[*] Rooting process complete.'
+        echo ""
+        echo 'Next Steps:'
+        echo "1. Install the Magisk APK ('$magisk_apk_path') in BlueStacks."
+        echo "2. Open the Kitsune Mask app and follow the on-screen prompts for additional setup."
+        echo "3. After reboot, your BlueStacks should be rooted."
+    else
+        echo '[*] Patched initrd created successfully.'
+        echo ""
+        echo 'Next Steps:'
+        echo "1. Manually copy the patched initrd to the BlueStacks app directory:"
+        echo "   sudo cp \"$initrd_output\" \"$initrd_path\""
+        echo "2. Start BlueStacks."
+        echo "3. Install the Magisk APK ('$magisk_apk_path') in BlueStacks."
+        echo "4. Open the Kitsune Mask app and follow prompts for additional setup."
+    fi
+}
+
+# --- Unrooting Logic ---
+
+function do_unroot() {
+    local backup_dir=""
+
+    # Parse unroot command options
+    shift # remove 'unroot' from args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -b|--backup-dir)
+                backup_dir=$(abspath "$2")
+                shift 2
+                ;;
+            *)
+                echo "Unknown option: $1"
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
+
+    local initrd_path="$BLUESTACKS_APP_PATH/Contents/img/initrd_hvf.img"
+    local initrd_backup_path
+    if [ -n "$backup_dir" ]; then
+        initrd_backup_path="$backup_dir/initrd_hvf.img"
+    else
+        initrd_backup_path="$initrd_path.bak"
+    fi
+
+    echo ""
+    echo '=================================================='
+    echo '**       BlueStacks Air Magisk Uninstaller      **'
+    echo '=================================================='
+    echo ""
+
+    if [ ! -f "$initrd_backup_path" ]; then
+        echo "[!] initrd backup not found at: $initrd_backup_path"
+        echo "If your backup is in a different location, please specify it with -b/--backup-dir."
+        exit 1
+    fi
+
+    read -p "This will restore the original initrd. Are you sure? (y/n): " confirm && [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]] || exit 0
+    echo ""
+
+    pkill -x BlueStacks || true # Don't fail if not running
+
+    echo "[*] Restoring original initrd from $initrd_backup_path..."
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "This script needs to copy a file into the /Applications directory."
+        echo "Please enter your password to grant sudo permissions."
+        sudo cp "$initrd_backup_path" "$initrd_path"
+    else
+        cp "$initrd_backup_path" "$initrd_path"
+    fi
+
+    echo "[*] Starting BlueStacks..."
+    open -n "$BLUESTACKS_APP_PATH"
+    echo '[*] Unrooting process complete.'
+}
+
+# --- Main Script ---
+
+function main() {
+    if [[ $# -eq 0 ]]; then
+        print_usage
+        exit 1
+    fi
+
+    check_bluestacks
+
+    case "$1" in
+        root)
+            do_root "$@"
+            ;;
+        unroot)
+            do_unroot "$@"
+            ;;
+        help)
+            print_usage
+            ;;
+        *)
+            echo "Invalid command: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+
+    echo ""
+    echo "[*] Done."
+}
+
+main "$@"
+</file>
+
+<file path="LICENSE.md">
+Attribution-NonCommercial-NoDerivatives 4.0 International
+
+=======================================================================
+
+Creative Commons Corporation ("Creative Commons") is not a law firm and
+does not provide legal services or legal advice. Distribution of
+Creative Commons public licenses does not create a lawyer-client or
+other relationship. Creative Commons makes its licenses and related
+information available on an "as-is" basis. Creative Commons gives no
+warranties regarding its licenses, any material licensed under their
+terms and conditions, or any related information. Creative Commons
+disclaims all liability for damages resulting from their use to the
+fullest extent possible.
+
+Using Creative Commons Public Licenses
+
+Creative Commons public licenses provide a standard set of terms and
+conditions that creators and other rights holders may use to share
+original works of authorship and other material subject to copyright
+and certain other rights specified in the public license below. The
+following considerations are for informational purposes only, are not
+exhaustive, and do not form part of our licenses.
+
+     Considerations for licensors: Our public licenses are
+     intended for use by those authorized to give the public
+     permission to use material in ways otherwise restricted by
+     copyright and certain other rights. Our licenses are
+     irrevocable. Licensors should read and understand the terms
+     and conditions of the license they choose before applying it.
+     Licensors should also secure all rights necessary before
+     applying our licenses so that the public can reuse the
+     material as expected. Licensors should clearly mark any
+     material not subject to the license. This includes other CC-
+     licensed material, or material used under an exception or
+     limitation to copyright. More considerations for licensors:
+    wiki.creativecommons.org/Considerations_for_licensors
+
+     Considerations for the public: By using one of our public
+     licenses, a licensor grants the public permission to use the
+     licensed material under specified terms and conditions. If
+     the licensor's permission is not necessary for any reason--for
+     example, because of any applicable exception or limitation to
+     copyright--then that use is not regulated by the license. Our
+     licenses grant only permissions under copyright and certain
+     other rights that a licensor has authority to grant. Use of
+     the licensed material may still be restricted for other
+     reasons, including because others have copyright or other
+     rights in the material. A licensor may make special requests,
+     such as asking that all changes be marked or described.
+     Although not required by our licenses, you are encouraged to
+     respect those requests where reasonable. More considerations
+     for the public:
+    wiki.creativecommons.org/Considerations_for_licensees
+
+=======================================================================
+
+Creative Commons Attribution-NonCommercial-NoDerivatives 4.0
+International Public License
+
+By exercising the Licensed Rights (defined below), You accept and agree
+to be bound by the terms and conditions of this Creative Commons
+Attribution-NonCommercial-NoDerivatives 4.0 International Public
+License ("Public License"). To the extent this Public License may be
+interpreted as a contract, You are granted the Licensed Rights in
+consideration of Your acceptance of these terms and conditions, and the
+Licensor grants You such rights in consideration of benefits the
+Licensor receives from making the Licensed Material available under
+these terms and conditions.
+
+
+Section 1 -- Definitions.
+
+  a. Adapted Material means material subject to Copyright and Similar
+     Rights that is derived from or based upon the Licensed Material
+     and in which the Licensed Material is translated, altered,
+     arranged, transformed, or otherwise modified in a manner requiring
+     permission under the Copyright and Similar Rights held by the
+     Licensor. For purposes of this Public License, where the Licensed
+     Material is a musical work, performance, or sound recording,
+     Adapted Material is always produced where the Licensed Material is
+     synched in timed relation with a moving image.
+
+  b. Copyright and Similar Rights means copyright and/or similar rights
+     closely related to copyright including, without limitation,
+     performance, broadcast, sound recording, and Sui Generis Database
+     Rights, without regard to how the rights are labeled or
+     categorized. For purposes of this Public License, the rights
+     specified in Section 2(b)(1)-(2) are not Copyright and Similar
+     Rights.
+
+  c. Effective Technological Measures means those measures that, in the
+     absence of proper authority, may not be circumvented under laws
+     fulfilling obligations under Article 11 of the WIPO Copyright
+     Treaty adopted on December 20, 1996, and/or similar international
+     agreements.
+
+  d. Exceptions and Limitations means fair use, fair dealing, and/or
+     any other exception or limitation to Copyright and Similar Rights
+     that applies to Your use of the Licensed Material.
+
+  e. Licensed Material means the artistic or literary work, database,
+     or other material to which the Licensor applied this Public
+     License.
+
+  f. Licensed Rights means the rights granted to You subject to the
+     terms and conditions of this Public License, which are limited to
+     all Copyright and Similar Rights that apply to Your use of the
+     Licensed Material and that the Licensor has authority to license.
+
+  g. Licensor means the individual(s) or entity(ies) granting rights
+     under this Public License.
+
+  h. NonCommercial means not primarily intended for or directed towards
+     commercial advantage or monetary compensation. For purposes of
+     this Public License, the exchange of the Licensed Material for
+     other material subject to Copyright and Similar Rights by digital
+     file-sharing or similar means is NonCommercial provided there is
+     no payment of monetary compensation in connection with the
+     exchange.
+
+  i. Share means to provide material to the public by any means or
+     process that requires permission under the Licensed Rights, such
+     as reproduction, public display, public performance, distribution,
+     dissemination, communication, or importation, and to make material
+     available to the public including in ways that members of the
+     public may access the material from a place and at a time
+     individually chosen by them.
+
+  j. Sui Generis Database Rights means rights other than copyright
+     resulting from Directive 96/9/EC of the European Parliament and of
+     the Council of 11 March 1996 on the legal protection of databases,
+     as amended and/or succeeded, as well as other essentially
+     equivalent rights anywhere in the world.
+
+  k. You means the individual or entity exercising the Licensed Rights
+     under this Public License. Your has a corresponding meaning.
+
+
+Section 2 -- Scope.
+
+  a. License grant.
+
+       1. Subject to the terms and conditions of this Public License,
+          the Licensor hereby grants You a worldwide, royalty-free,
+          non-sublicensable, non-exclusive, irrevocable license to
+          exercise the Licensed Rights in the Licensed Material to:
+
+            a. reproduce and Share the Licensed Material, in whole or
+               in part, for NonCommercial purposes only; and
+
+            b. produce and reproduce, but not Share, Adapted Material
+               for NonCommercial purposes only.
+
+       2. Exceptions and Limitations. For the avoidance of doubt, where
+          Exceptions and Limitations apply to Your use, this Public
+          License does not apply, and You do not need to comply with
+          its terms and conditions.
+
+       3. Term. The term of this Public License is specified in Section
+          6(a).
+
+       4. Media and formats; technical modifications allowed. The
+          Licensor authorizes You to exercise the Licensed Rights in
+          all media and formats whether now known or hereafter created,
+          and to make technical modifications necessary to do so. The
+          Licensor waives and/or agrees not to assert any right or
+          authority to forbid You from making technical modifications
+          necessary to exercise the Licensed Rights, including
+          technical modifications necessary to circumvent Effective
+          Technological Measures. For purposes of this Public License,
+          simply making modifications authorized by this Section 2(a)
+          (4) never produces Adapted Material.
+
+       5. Downstream recipients.
+
+            a. Offer from the Licensor -- Licensed Material. Every
+               recipient of the Licensed Material automatically
+               receives an offer from the Licensor to exercise the
+               Licensed Rights under the terms and conditions of this
+               Public License.
+
+            b. No downstream restrictions. You may not offer or impose
+               any additional or different terms or conditions on, or
+               apply any Effective Technological Measures to, the
+               Licensed Material if doing so restricts exercise of the
+               Licensed Rights by any recipient of the Licensed
+               Material.
+
+       6. No endorsement. Nothing in this Public License constitutes or
+          may be construed as permission to assert or imply that You
+          are, or that Your use of the Licensed Material is, connected
+          with, or sponsored, endorsed, or granted official status by,
+          the Licensor or others designated to receive attribution as
+          provided in Section 3(a)(1)(A)(i).
+
+  b. Other rights.
+
+       1. Moral rights, such as the right of integrity, are not
+          licensed under this Public License, nor are publicity,
+          privacy, and/or other similar personality rights; however, to
+          the extent possible, the Licensor waives and/or agrees not to
+          assert any such rights held by the Licensor to the limited
+          extent necessary to allow You to exercise the Licensed
+          Rights, but not otherwise.
+
+       2. Patent and trademark rights are not licensed under this
+          Public License.
+
+       3. To the extent possible, the Licensor waives any right to
+          collect royalties from You for the exercise of the Licensed
+          Rights, whether directly or through a collecting society
+          under any voluntary or waivable statutory or compulsory
+          licensing scheme. In all other cases the Licensor expressly
+          reserves any right to collect such royalties, including when
+          the Licensed Material is used other than for NonCommercial
+          purposes.
+
+
+Section 3 -- License Conditions.
+
+Your exercise of the Licensed Rights is expressly made subject to the
+following conditions.
+
+  a. Attribution.
+
+       1. If You Share the Licensed Material, You must:
+
+            a. retain the following if it is supplied by the Licensor
+               with the Licensed Material:
+
+                 i. identification of the creator(s) of the Licensed
+                    Material and any others designated to receive
+                    attribution, in any reasonable manner requested by
+                    the Licensor (including by pseudonym if
+                    designated);
+
+                ii. a copyright notice;
+
+               iii. a notice that refers to this Public License;
+
+                iv. a notice that refers to the disclaimer of
+                    warranties;
+
+                 v. a URI or hyperlink to the Licensed Material to the
+                    extent reasonably practicable;
+
+            b. indicate if You modified the Licensed Material and
+               retain an indication of any previous modifications; and
+
+            c. indicate the Licensed Material is licensed under this
+               Public License, and include the text of, or the URI or
+               hyperlink to, this Public License.
+
+          For the avoidance of doubt, You do not have permission under
+          this Public License to Share Adapted Material.
+
+       2. You may satisfy the conditions in Section 3(a)(1) in any
+          reasonable manner based on the medium, means, and context in
+          which You Share the Licensed Material. For example, it may be
+          reasonable to satisfy the conditions by providing a URI or
+          hyperlink to a resource that includes the required
+          information.
+
+       3. If requested by the Licensor, You must remove any of the
+          information required by Section 3(a)(1)(A) to the extent
+          reasonably practicable.
+
+
+Section 4 -- Sui Generis Database Rights.
+
+Where the Licensed Rights include Sui Generis Database Rights that
+apply to Your use of the Licensed Material:
+
+  a. for the avoidance of doubt, Section 2(a)(1) grants You the right
+     to extract, reuse, reproduce, and Share all or a substantial
+     portion of the contents of the database for NonCommercial purposes
+     only and provided You do not Share Adapted Material;
+
+  b. if You include all or a substantial portion of the database
+     contents in a database in which You have Sui Generis Database
+     Rights, then the database in which You have Sui Generis Database
+     Rights (but not its individual contents) is Adapted Material; and
+
+  c. You must comply with the conditions in Section 3(a) if You Share
+     all or a substantial portion of the contents of the database.
+
+For the avoidance of doubt, this Section 4 supplements and does not
+replace Your obligations under this Public License where the Licensed
+Rights include other Copyright and Similar Rights.
+
+
+Section 5 -- Disclaimer of Warranties and Limitation of Liability.
+
+  a. UNLESS OTHERWISE SEPARATELY UNDERTAKEN BY THE LICENSOR, TO THE
+     EXTENT POSSIBLE, THE LICENSOR OFFERS THE LICENSED MATERIAL AS-IS
+     AND AS-AVAILABLE, AND MAKES NO REPRESENTATIONS OR WARRANTIES OF
+     ANY KIND CONCERNING THE LICENSED MATERIAL, WHETHER EXPRESS,
+     IMPLIED, STATUTORY, OR OTHER. THIS INCLUDES, WITHOUT LIMITATION,
+     WARRANTIES OF TITLE, MERCHANTABILITY, FITNESS FOR A PARTICULAR
+     PURPOSE, NON-INFRINGEMENT, ABSENCE OF LATENT OR OTHER DEFECTS,
+     ACCURACY, OR THE PRESENCE OR ABSENCE OF ERRORS, WHETHER OR NOT
+     KNOWN OR DISCOVERABLE. WHERE DISCLAIMERS OF WARRANTIES ARE NOT
+     ALLOWED IN FULL OR IN PART, THIS DISCLAIMER MAY NOT APPLY TO YOU.
+
+  b. TO THE EXTENT POSSIBLE, IN NO EVENT WILL THE LICENSOR BE LIABLE
+     TO YOU ON ANY LEGAL THEORY (INCLUDING, WITHOUT LIMITATION,
+     NEGLIGENCE) OR OTHERWISE FOR ANY DIRECT, SPECIAL, INDIRECT,
+     INCIDENTAL, CONSEQUENTIAL, PUNITIVE, EXEMPLARY, OR OTHER LOSSES,
+     COSTS, EXPENSES, OR DAMAGES ARISING OUT OF THIS PUBLIC LICENSE OR
+     USE OF THE LICENSED MATERIAL, EVEN IF THE LICENSOR HAS BEEN
+     ADVISED OF THE POSSIBILITY OF SUCH LOSSES, COSTS, EXPENSES, OR
+     DAMAGES. WHERE A LIMITATION OF LIABILITY IS NOT ALLOWED IN FULL OR
+     IN PART, THIS LIMITATION MAY NOT APPLY TO YOU.
+
+  c. The disclaimer of warranties and limitation of liability provided
+     above shall be interpreted in a manner that, to the extent
+     possible, most closely approximates an absolute disclaimer and
+     waiver of all liability.
+
+
+Section 6 -- Term and Termination.
+
+  a. This Public License applies for the term of the Copyright and
+     Similar Rights licensed here. However, if You fail to comply with
+     this Public License, then Your rights under this Public License
+     terminate automatically.
+
+  b. Where Your right to use the Licensed Material has terminated under
+     Section 6(a), it reinstates:
+
+       1. automatically as of the date the violation is cured, provided
+          it is cured within 30 days of Your discovery of the
+          violation; or
+
+       2. upon express reinstatement by the Licensor.
+
+     For the avoidance of doubt, this Section 6(b) does not affect any
+     right the Licensor may have to seek remedies for Your violations
+     of this Public License.
+
+  c. For the avoidance of doubt, the Licensor may also offer the
+     Licensed Material under separate terms or conditions or stop
+     distributing the Licensed Material at any time; however, doing so
+     will not terminate this Public License.
+
+  d. Sections 1, 5, 6, 7, and 8 survive termination of this Public
+     License.
+
+
+Section 7 -- Other Terms and Conditions.
+
+  a. The Licensor shall not be bound by any additional or different
+     terms or conditions communicated by You unless expressly agreed.
+
+  b. Any arrangements, understandings, or agreements regarding the
+     Licensed Material not stated herein are separate from and
+     independent of the terms and conditions of this Public License.
+
+
+Section 8 -- Interpretation.
+
+  a. For the avoidance of doubt, this Public License does not, and
+     shall not be interpreted to, reduce, limit, restrict, or impose
+     conditions on any use of the Licensed Material that could lawfully
+     be made without permission under this Public License.
+
+  b. To the extent possible, if any provision of this Public License is
+     deemed unenforceable, it shall be automatically reformed to the
+     minimum extent necessary to make it enforceable. If the provision
+     cannot be reformed, it shall be severed from this Public License
+     without affecting the enforceability of the remaining terms and
+     conditions.
+
+  c. No term or condition of this Public License will be waived and no
+     failure to comply consented to unless expressly agreed to by the
+     Licensor.
+
+  d. Nothing in this Public License constitutes or may be interpreted
+     as a limitation upon, or waiver of, any privileges and immunities
+     that apply to the Licensor or You, including from the legal
+     processes of any jurisdiction or authority.
+
+=======================================================================
+
+Creative Commons is not a party to its public
+licenses. Notwithstanding, Creative Commons may elect to apply one of
+its public licenses to material it publishes and in those instances
+will be considered the “Licensor.” The text of the Creative Commons
+public licenses is dedicated to the public domain under the CC0 Public
+Domain Dedication. Except for the limited purpose of indicating that
+material is shared under a Creative Commons public license or as
+otherwise permitted by the Creative Commons policies published at
+creativecommons.org/policies, Creative Commons does not authorize the
+use of the trademark "Creative Commons" or any other trademark or logo
+of Creative Commons without its prior written consent including,
+without limitation, in connection with any unauthorized modifications
+to any of its public licenses or any other arrangements,
+understandings, or agreements concerning use of licensed material. For
+the avoidance of doubt, this paragraph does not form part of the
+public licenses.
+
+Creative Commons may be contacted at creativecommons.org.
+</file>
+
+<file path="magisk.rc">
+on post-fs-data
+    start logd
+    exec u:r:su:s0 root root -- /boot/magisk/magiskpolicy --live --magisk
+    exec u:r:magisk:s0 root root -- /boot/magisk/magiskpolicy --live --magisk
+    exec u:r:update_engine:s0 root root -- /boot/magisk/magiskpolicy --live --magisk
+    exec u:r:su:s0 root root -- /boot/magisk/magisk64 --auto-selinux --setup-sbin /boot/magisk /sbin
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --post-fs-data
+
+on nonencrypted
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --service
+
+on property:vold.decrypt=trigger_restart_framework
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --service
+
+on property:sys.boot_completed=1
+    mkdir /data/adb/magisk 755
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --boot-complete
+
+on property:init.svc.zygote=restarting
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --zygote-restart
+
+on property:init.svc.zygote=stopped
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --zygote-restart
+</file>
+
+<file path="installer.sh">
+#!/bin/bash
+# Simple installer/launcher for BlueStacks Air rooting tool.
+# Usage (SIP disabled):
+#   bash <(curl -fsSL https://raw.githubusercontent.com/<USER>/<REPO>/main/installer.sh) root
+# Usage (SIP enabled):
+#   bash <(curl -fsSL https://raw.githubusercontent.com/<USER>/<REPO>/main/installer.sh) manual
+
+set -euo pipefail
+
+# Handle the case where the script is executed via:
+#   bash -c "$(curl -fsSL <URL>)" <cmd> [args]
+# In this scenario, <cmd> becomes $0 and there are *no* positional
+# parameters. Detect this and shift the value into $1 so the rest of the
+# script can operate as usual.
+if [[ $# -eq 0 && "$0" =~ ^(root|manual|unroot)$ ]]; then
+  # Re-assign positional params so that $1 holds the command
+  set -- "$0" "${@:1}"
+fi
+
+# Constants
+REPO_URL="https://github.com/Jordan231111/bluestacks-air-oneclick-root"
+WORK_DIR="/tmp/root-bluestacks-air-$$"
+
+function usage() {
+  cat <<EOF
+BlueStacks Air Root Installer
+
+This script bootstraps the rooting process with one command. It clones the
+latest version of the rooting repository to a temporary directory, then runs
+the unified tool with the appropriate options.
+
+Usage:
+  installer.sh [root|manual|unroot]
+
+Commands:
+  root     Perform an automatic root (requires SIP disabled; uses sudo).
+  manual   Generate a patched initrd for SIP-enabled systems.
+  unroot   Restore original initrd (requires sudo).
+EOF
+}
+
+if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+CMD="$1"
+shift || true
+
+# Ensure curl and git are available
+for bin in git curl; do
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    echo "[!] $bin is required but not installed. Aborting." >&2
+    exit 1
+  fi
+done
+
+# Clone repo quietly
+if [[ -d "$WORK_DIR" ]]; then
+  rm -rf "$WORK_DIR"
+fi
+
+echo "[*] Cloning repository..."
+GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 "$REPO_URL" "$WORK_DIR"
+
+cd "$WORK_DIR"
+chmod +x bluestacks-air-tool.sh
+
+echo "[*] Running command: $CMD"
+case "$CMD" in
+  root)
+    sudo ./bluestacks-air-tool.sh root "$@" ;;
+  manual)
+    ./bluestacks-air-tool.sh root -o ./initrd_hvf.img.patched "$@"
+    echo "\n[!] Manual mode complete. The patched file is at: $WORK_DIR/initrd_hvf.img.patched" ;;
+  unroot)
+    sudo ./bluestacks-air-tool.sh unroot "$@" ;;
+  *)
+    echo "Invalid command: $CMD" >&2
+    usage
+    exit 1 ;;
+esac
+
+echo "[*] Cleaning up..."
+rm -rf "$WORK_DIR"
+
+echo "[*] Done."
+</file>
+
+<file path="README.md">
+# bluestacks-air-oneclick-root
+
+Easily root bluestacks air for macos with one command
+
+A simple tool to root BlueStacks Air on macOS using Kitsune Magisk.
+
+![Screenshot](/images/bluestacks-air-root-magisk.png)
+
+## Compatibility
+
+This tool has been tested with the following versions of BlueStacks Air:
+
+- 5.21.680.7532
+- 5.21.695.7506
+- 5.21.700.7523
+- 5.21.705.7515
+- 5.21.712.7503
+- 5.21.715.7538
+- 5.21.720.7530
+
+...and with Kitsune Magisk `v27.2-kitsune-4`.
+
+## Prerequisites
+
+1. **Install [BlueStacks Air](https://www.bluestacks.com/mac)** and **IMPORTANT** launch it once so it finishes its first-run setup, then quit BlueStacks.
+
+That’s all you need—the single-line installer takes care of cloning this repo, downloading the latest Kitsune Magisk APK, and patching BlueStacks for you.
+
+## Understanding System Integrity Protection (SIP)
+
+System Integrity Protection (SIP) is a security feature in macOS. The rooting method depends on whether SIP is enabled or disabled on your system.
+
+To check your SIP status, open **Terminal** and run:
+
+```bash
+csrutil status
+```
+
+The output will tell you if SIP is `enabled` or `disabled`.
+
+---
+
+## 🚀 One-Liner Quick Start
+
+Paste **one** command into Terminal and let the script do the rest.
+
+### Most Macs (SIP ENABLED — manual copy step)
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Jordan231111/bluestacks-air-oneclick-root/main/installer.sh)" manual
+```
+
+What happens:
+
+1. Repo is cloned to a temporary folder.
+2. Latest Kitsune Magisk is auto-downloaded.
+3. A patched `initrd_hvf.img.patched` is generated.
+4. Terminal prints the file path – just copy it into `/Applications/BlueStacks.app/Contents/img/` (replace the original) and start BlueStacks.
+
+### Advanced (SIP DISABLED — fully automatic)
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Jordan231111/bluestacks-air-oneclick-root/main/installer.sh)" root
+```
+
+Everything (patch + replacement + BlueStacks launch) is handled automatically.
+
+---
+
+### Buy me a coffee
+
+If you found this tool helpful, consider buying me a coffee!
+
+[![Donate via Ko-Fi](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://ko-fi.com/yejordan)
+</file>
+
+</files>
